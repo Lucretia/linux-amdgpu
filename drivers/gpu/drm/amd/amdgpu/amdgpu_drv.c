@@ -616,7 +616,7 @@ amdgpu_pci_shutdown(struct pci_dev *pdev)
 	 * unfortunately we can't detect certain
 	 * hypervisors so just do this all the time.
 	 */
-	amdgpu_suspend(adev);
+	amdgpu_device_shutdown(adev);
 }
 
 static int amdgpu_pmops_suspend(struct device *dev)

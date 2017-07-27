@@ -1869,7 +1869,7 @@ static void amdgpu_late_init_func_handler(struct work_struct *work)
 	amdgpu_late_set_cg_state(adev);
 }
 
-int amdgpu_suspend(struct amdgpu_device *adev)
+static int amdgpu_suspend(struct amdgpu_device *adev)
 {
 	int i, r;
 
@@ -1906,6 +1906,51 @@ int amdgpu_suspend(struct amdgpu_device *adev)
 
 	if (amdgpu_sriov_vf(adev))
 		amdgpu_virt_release_full_gpu(adev, false);
+
+	return 0;
+}
+
+int amdgpu_device_shutdown(struct amdgpu_device *adev)
+{
+	int i, r;
+
+	if (amdgpu_sriov_vf(adev))
+		amdgpu_virt_request_full_gpu(adev, false);
+
+	/* ungate SMC block first */
+	r = amdgpu_set_clockgating_state(adev, AMD_IP_BLOCK_TYPE_SMC,
+					 AMD_CG_STATE_UNGATE);
+	if (r) {
+		DRM_ERROR("set_clockgating_state(ungate) SMC failed %d\n", r);
+	}
+
+	for (i = adev->num_ip_blocks - 1; i >= 0; i--) {
+		if (!adev->ip_blocks[i].status.valid)
+			continue;
+		/* ungate blocks so that suspend can properly shut them down */
+		if (i != AMD_IP_BLOCK_TYPE_SMC) {
+			r = adev->ip_blocks[i].version->funcs->set_clockgating_state((void *)adev,
+										     AMD_CG_STATE_UNGATE);
+			if (r) {
+				DRM_ERROR("set_clockgating_state(ungate) of IP block <%s> failed %d\n",
+					  adev->ip_blocks[i].version->funcs->name, r);
+			}
+		}
+		/* XXX handle errors */
+		r = adev->ip_blocks[i].version->funcs->hw_fini(adev);
+		/* XXX handle errors */
+		if (r) {
+			DRM_ERROR("suspend of IP block <%s> failed %d\n",
+				  adev->ip_blocks[i].version->funcs->name, r);
+		}
+	}
+
+	if (amdgpu_sriov_vf(adev))
+		amdgpu_virt_release_full_gpu(adev, false);
+
+	/* force asic_init to run the next time the driver loads */
+	if (adev->asic_type >= CHIP_BONAIRE)
+		amdgpu_atombios_scratch_force_asic_init(adev);
 
 	return 0;
 }
