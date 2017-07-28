@@ -1952,6 +1952,11 @@ int amdgpu_device_shutdown(struct amdgpu_device *adev)
 	if (adev->asic_type >= CHIP_BONAIRE)
 		amdgpu_atombios_scratch_force_asic_init(adev);
 
+	/* reset the GPU */
+	r = amdgpu_asic_reset(adev);
+	if (r)
+		DRM_ERROR("amdgpu asic reset failed\n");
+
 	return 0;
 }
 
